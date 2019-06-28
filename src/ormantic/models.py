@@ -233,17 +233,20 @@ class MetaModel(pydantic.main.MetaModel):
 class Model(pydantic.BaseModel, metaclass=MetaModel):
     def __init__(self, **kwargs):
         if "pk" in kwargs:
-            kwargs[self.Mapping.pk_name] = kwargs.pop("pk")
+            kwargs[self.Mapping.pk_name] = kwargs["pk"]
 
-        super().__init__(**kwargs)
-
-    def _process_values(self, input_data: typing.Any) -> "DictStrAny":
-        pk_only = input_data.pop("__pk_only__", False)
-        if pk_only:
-            v, _ = pydantic.validate_model(self, input_data, raise_exc=False)
+        # HACK: validation no longer depends on _process_values
+        # and calls pydantic.validate_model().
+        # There's no way to bypass the ValidationErrors,
+        # so just manually replicate what pydantic expects to be there
+        # for working __setattr__ and __getattr__
+        if kwargs.pop("__pk_only__", False):
+            object.__setattr__(self, '__fields_set__', set())
+            object.__setattr__(self, '__values__', {})
+            setattr(self, self.Mapping.pk_name, kwargs.pop("pk"))
         else:
-            v = pydantic.validate_model(self, input_data)
-        return v
+            kwargs.pop("pk", None)
+            super().__init__(**kwargs)
 
     @property
     def pk(self):
